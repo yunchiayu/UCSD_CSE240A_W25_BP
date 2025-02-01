@@ -23,7 +23,7 @@ This assignment is to be done individually by every student. Please make sure yo
 
 ## Get Started
 
-Clone this Repository: git@github.com:architagarwal256/UCSD_CSE240A_W25_BP.git
+Clone this Repository: https://github.com/architagarwal256/UCSD_CSE240A_W25_BP.git
 
 Once you have checked out your repository, start adding your code into this. To compile, run the following command from within the `src` directory: `make all` or `make`. This will compile your code and generate output files. You will also get a executable binary called `predictor`. To run this, you need to give the following command:
 
