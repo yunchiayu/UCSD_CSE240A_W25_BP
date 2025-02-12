@@ -39,7 +39,7 @@ int tour_pcBits = 10;       // Number of bits used for program counter -> Local 
 // tag_bits = YAGS_ghistoryBits - index bits = YAGS_ghistoryBits - YAGS_cacheBits + 1 = 16 - 12 + 1 = 5
 int YAGS_cacheBits = 14;    // Number of bits used for Cache entries   -> Cache Table: (2^YAGS_cacheBits) * (valid_bit + LRU_bit + counter_bit + tag_bit ) = (2^12) * (1+1+2+5)
 int YAGS_ghistoryBits = 16; // Number of bits used for Global History 
-int YAGS_lhistoryBits = 14; // Number of bits used for Local  History  -> Local  Prediction Table: (2^YAGS_lhistoryBits) * 2 = (2^12, 2)
+int YAGS_lhistoryBits = 15; // Number of bits used for Local  History  -> Local  Prediction Table: (2^YAGS_lhistoryBits) * 2 = (2^12, 2)
 int YAGS_pcBits = 10;       // Number of bits used for program counter -> Local  History    Table: (2^tour_pcBits) * tour_lhistoryBits = (2^10, 12)
 
 //------------------------------------//
@@ -68,12 +68,10 @@ uint16_t *lht_YAGS;     // Local  History    Table: (2^YAGS_pcBits) * YAGS_lhist
 // Not Take Cache: (2^YAGS_cacheBits) * ( YAGS_lhistoryBits + 2) = (2^12, 1+1+2+5)
 uint16_t *TCache_tag_YAGS;     // (2^YAGS_cacheBits)     * 5 bits
 uint8_t  *TCache_counter_YAGS; // (2^YAGS_cacheBits)     * 2 bits
-uint8_t  *TCache_valid_YAGS;   // (2^YAGS_cacheBits)     * 1 bit
 uint8_t  *TCache_LRU_YAGS;     // (2^YAGS_cacheBits - 1) * 1 bit
 
 uint16_t *NTCache_tag_YAGS;     // (2^YAGS_cacheBits)     * 5 bits
 uint8_t  *NTCache_counter_YAGS; // (2^YAGS_cacheBits)     * 2 bits
-uint8_t  *NTCache_valid_YAGS;   // (2^YAGS_cacheBits)     * 1 bit
 uint8_t  *NTCache_LRU_YAGS;     // (2^YAGS_cacheBits - 1) * 1 bit
 
 
@@ -322,16 +320,14 @@ void init_YAGS()
   int lht_entries   = 1 << YAGS_pcBits;
 
   lpt_YAGS = (uint8_t *)malloc(lpt_entries * sizeof(uint8_t));
-  lht_YAGS = (uint16_t *)malloc(lpt_entries * sizeof(uint16_t));
+  lht_YAGS = (uint16_t *)malloc(lht_entries * sizeof(uint16_t));
 
   TCache_tag_YAGS      = (uint16_t *)malloc(cache_entries * sizeof(uint16_t));
   TCache_counter_YAGS  = (uint8_t  *)malloc(cache_entries * sizeof(uint8_t ));
-  TCache_valid_YAGS    = (uint8_t  *)malloc(cache_entries * sizeof(uint8_t ));
   TCache_LRU_YAGS      = (uint8_t  *)malloc((cache_entries >> 1) * sizeof(uint8_t ));
 
   NTCache_tag_YAGS      = (uint16_t *)malloc(cache_entries * sizeof(uint16_t));
   NTCache_counter_YAGS  = (uint8_t  *)malloc(cache_entries * sizeof(uint8_t ));
-  NTCache_valid_YAGS    = (uint8_t  *)malloc(cache_entries * sizeof(uint8_t ));
   NTCache_LRU_YAGS      = (uint8_t  *)malloc((cache_entries >> 1) * sizeof(uint8_t ));
 
   int i = 0;
@@ -341,11 +337,9 @@ void init_YAGS()
   for (i = 0; i < cache_entries; i++) { 
     TCache_tag_YAGS[i]      = 0; 
     TCache_counter_YAGS[i]  = WN;
-    TCache_valid_YAGS[i]    = 0;
 
     NTCache_tag_YAGS[i]      = 0; 
     NTCache_counter_YAGS[i]  = WN;
-    NTCache_valid_YAGS[i]    = 0;
   }
   
   for (i = 0; i < (cache_entries >> 1); i++) { 
@@ -380,7 +374,6 @@ uint8_t YAGS_predict(uint32_t pc)
 
   // pre-initiation
   uint16_t tag_0 = 0,     tag_1 = 0;
-  uint8_t  valid_0 = 0,   valid_1 = 0;
   uint8_t  counter_0 = 0, counter_1 = 0;
 
   switch(lpt_prediction)
@@ -389,26 +382,22 @@ uint8_t YAGS_predict(uint32_t pc)
       // {tag_bit, counter_bit, LRU_bit, valid_bit}: {5, 2, 1, 1}
       tag_0 = NTCache_tag_YAGS[ (set_index << 1)     ];
       tag_1 = NTCache_tag_YAGS[ (set_index << 1) + 1 ];
-      valid_0 = NTCache_valid_YAGS[ (set_index << 1)     ];
-      valid_1 = NTCache_valid_YAGS[ (set_index << 1) + 1 ];
       counter_0 =  NTCache_counter_YAGS[ (set_index << 1)     ];
       counter_1 =  NTCache_counter_YAGS[ (set_index << 1) + 1 ];
        
-      if (valid_0 && tag == tag_0){       return getPrediction(counter_0); }
-      else if (valid_1 && tag == tag_1){  return getPrediction(counter_1);}
+      if (tag == tag_0){       return getPrediction(counter_0); }
+      else if (tag == tag_1){  return getPrediction(counter_1);}
       else {                              return lpt_prediction;}
 
     case NOTTAKEN: // check T Cache
       // {tag_bit, counter_bit, LRU_bit, valid_bit}: {5, 2, 1, 1}
       tag_0 = TCache_tag_YAGS[ (set_index << 1)     ];
       tag_1 = TCache_tag_YAGS[ (set_index << 1) + 1 ];
-      valid_0 = TCache_valid_YAGS[ (set_index << 1)     ];
-      valid_1 = TCache_valid_YAGS[ (set_index << 1) + 1 ];
       counter_0 =  TCache_counter_YAGS[ (set_index << 1)     ];
       counter_1 =  TCache_counter_YAGS[ (set_index << 1) + 1 ];
        
-      if (valid_0 && tag == tag_0){       return getPrediction(counter_0); }
-      else if (valid_1 && tag == tag_1){  return getPrediction(counter_1);}
+      if (tag == tag_0){       return getPrediction(counter_0); }
+      else if (tag == tag_1){  return getPrediction(counter_1);}
       else {                              return lpt_prediction;}
 
     default:
@@ -444,7 +433,6 @@ void train_YAGS(uint32_t pc, uint8_t outcome)
 
   // pre-initiation
   uint16_t tag_0 = 0,     tag_1 = 0;
-  uint8_t  valid_0 = 0,   valid_1 = 0;
   uint8_t  prediction_0 = 0, prediction_1 = 0; 
 
   switch (lpt_prediction)
@@ -453,56 +441,40 @@ void train_YAGS(uint32_t pc, uint8_t outcome)
     // {tag_bit, counter_bit, LRU_bit, valid_bit}: {5, 2, 1, 1}
     tag_0 = NTCache_tag_YAGS[ (set_index << 1)     ];
     tag_1 = NTCache_tag_YAGS[ (set_index << 1) + 1 ];
-    valid_0 = NTCache_valid_YAGS[ (set_index << 1)     ];
-    valid_1 = NTCache_valid_YAGS[ (set_index << 1) + 1 ];
     // uint8_t  counter_0 =  NTCache_counter_YAGS[ (set_index << 1)     ];
     // uint8_t  counter_1 =  NTCache_counter_YAGS[ (set_index << 1) + 1 ];
 
-    if (valid_0 && tag == tag_0){ // hit cache_data_0 -> update cache_data_0, LRU = 1
+    if (tag == tag_0){ // hit cache_data_0 -> update cache_data_0, LRU = 1
       updatePredictionTableState(NTCache_counter_YAGS[ (set_index << 1)     ], outcome);
       NTCache_LRU_YAGS[set_index] = 1;
 
-    } else if (valid_1 && tag == tag_1){ // hit cache_data_1 -> update cache_data_1, LRU = 0
+    } else if (tag == tag_1){ // hit cache_data_1 -> update cache_data_1, LRU = 0
       updatePredictionTableState(NTCache_counter_YAGS[ (set_index << 1) + 1 ], outcome);
       NTCache_LRU_YAGS[set_index] = 0;
 
     } else if (outcome == NOTTAKEN){ // miss && LPT prediction is wrong
-      if (valid_0 == 0) { // update cache_data_0, LRU = 1
+
+
+      prediction_0 = getPrediction(NTCache_counter_YAGS[ (set_index << 1) ]);
+      prediction_1 = getPrediction(NTCache_counter_YAGS[ (set_index << 1) + 1 ]);
+
+      if (prediction_0 == TAKEN) { // Redundant, update cache_data_0, LRU = 1
         NTCache_tag_YAGS[     (set_index << 1) ] = tag;
-        NTCache_valid_YAGS[   (set_index << 1) ] = 1;
         NTCache_counter_YAGS[ (set_index << 1) ] = WN;
         NTCache_LRU_YAGS[set_index] = 1;
-      } else if (valid_1 == 0) { // update cache_data_1, LRU = 0
+      } else if (prediction_1 == TAKEN) { // Redundant, update cache_data_1, LRU = 0
         NTCache_tag_YAGS[     (set_index << 1) + 1 ] = tag;
-        NTCache_valid_YAGS[   (set_index << 1) + 1 ] = 1;
         NTCache_counter_YAGS[ (set_index << 1) + 1 ] = WN;
         NTCache_LRU_YAGS[set_index] = 0;
-      } else { // valid_0 == 1 && valid_1 == 1
-        prediction_0 = getPrediction(NTCache_counter_YAGS[ (set_index << 1) ]);
-        prediction_1 = getPrediction(NTCache_counter_YAGS[ (set_index << 1) + 1 ]);
-
-        if (prediction_0 == TAKEN) { // Redundant, update cache_data_0, LRU = 1
+      } else { // Both not redundant
+        if (NTCache_LRU_YAGS[set_index] == 0){ // LRU = 0 -> update cache_data_0, LRU = 1
           NTCache_tag_YAGS[     (set_index << 1) ] = tag;
-          NTCache_valid_YAGS[   (set_index << 1) ] = 1;
           NTCache_counter_YAGS[ (set_index << 1) ] = WN;
           NTCache_LRU_YAGS[set_index] = 1;
-        } else if (prediction_1 == TAKEN) { // Redundant, update cache_data_1, LRU = 0
+        } else {
           NTCache_tag_YAGS[     (set_index << 1) + 1 ] = tag;
-          NTCache_valid_YAGS[   (set_index << 1) + 1 ] = 1;
           NTCache_counter_YAGS[ (set_index << 1) + 1 ] = WN;
           NTCache_LRU_YAGS[set_index] = 0;
-        } else { // Both not redundant
-          if (NTCache_LRU_YAGS[set_index] == 0){ // LRU = 0 -> update cache_data_0, LRU = 1
-            NTCache_tag_YAGS[     (set_index << 1) ] = tag;
-            NTCache_valid_YAGS[   (set_index << 1) ] = 1;
-            NTCache_counter_YAGS[ (set_index << 1) ] = WN;
-            NTCache_LRU_YAGS[set_index] = 1;
-          } else {
-            NTCache_tag_YAGS[     (set_index << 1) + 1 ] = tag;
-            NTCache_valid_YAGS[   (set_index << 1) + 1 ] = 1;
-            NTCache_counter_YAGS[ (set_index << 1) + 1 ] = WN;
-            NTCache_LRU_YAGS[set_index] = 0;
-          }
         }
       }
     }
@@ -512,56 +484,39 @@ void train_YAGS(uint32_t pc, uint8_t outcome)
     // {tag_bit, counter_bit, LRU_bit, valid_bit}: {5, 2, 1, 1}
     tag_0 = TCache_tag_YAGS[ (set_index << 1)     ];
     tag_1 = TCache_tag_YAGS[ (set_index << 1) + 1 ];
-    valid_0 = TCache_valid_YAGS[ (set_index << 1)     ];
-    valid_1 = TCache_valid_YAGS[ (set_index << 1) + 1 ];
     // uint8_t  counter_0 =  TCache_counter_YAGS[ (set_index << 1)     ];
     // uint8_t  counter_1 =  TCache_counter_YAGS[ (set_index << 1) + 1 ];
 
-    if (valid_0 && tag == tag_0){ // hit cache_data_0 -> update cache_data_0, LRU = 1
+    if (tag == tag_0){ // hit cache_data_0 -> update cache_data_0, LRU = 1
       updatePredictionTableState(TCache_counter_YAGS[ (set_index << 1)     ], outcome);
       TCache_LRU_YAGS[set_index] = 1;
 
-    } else if (valid_1 && tag == tag_1){ // hit cache_data_1 -> update cache_data_1, LRU = 0
+    } else if (tag == tag_1){ // hit cache_data_1 -> update cache_data_1, LRU = 0
       updatePredictionTableState(TCache_counter_YAGS[ (set_index << 1) + 1 ], outcome);
       TCache_LRU_YAGS[set_index] = 0;
 
     } else if (outcome == TAKEN){ // miss && LPT prediction is wrong
-      if (valid_0 == 0) { // update cache_data_0, LRU = 1
+
+      prediction_0 = getPrediction(TCache_counter_YAGS[ (set_index << 1) ]);
+      prediction_1 = getPrediction(TCache_counter_YAGS[ (set_index << 1) + 1 ]);
+
+      if (prediction_0 == NOTTAKEN) { // Redundant, update cache_data_0, LRU = 1
         TCache_tag_YAGS[     (set_index << 1) ] = tag;
-        TCache_valid_YAGS[   (set_index << 1) ] = 1;
         TCache_counter_YAGS[ (set_index << 1) ] = WT;
         TCache_LRU_YAGS[set_index] = 1;
-      } else if (valid_1 == 0) { // update cache_data_1, LRU = 0
+      } else if (prediction_1 == NOTTAKEN) { // Redundant, update cache_data_1, LRU = 0
         TCache_tag_YAGS[     (set_index << 1) + 1 ] = tag;
-        TCache_valid_YAGS[   (set_index << 1) + 1 ] = 1;
         TCache_counter_YAGS[ (set_index << 1) + 1 ] = WT;
         TCache_LRU_YAGS[set_index] = 0;
-      } else { // valid_0 == 1 && valid_1 == 1
-        prediction_0 = getPrediction(TCache_counter_YAGS[ (set_index << 1) ]);
-        prediction_1 = getPrediction(TCache_counter_YAGS[ (set_index << 1) + 1 ]);
-
-        if (prediction_0 == NOTTAKEN) { // Redundant, update cache_data_0, LRU = 1
+      } else { // Both not redundant
+        if (TCache_LRU_YAGS[set_index] == 0){ // LRU = 0 -> update cache_data_0, LRU = 1
           TCache_tag_YAGS[     (set_index << 1) ] = tag;
-          TCache_valid_YAGS[   (set_index << 1) ] = 1;
           TCache_counter_YAGS[ (set_index << 1) ] = WT;
           TCache_LRU_YAGS[set_index] = 1;
-        } else if (prediction_1 == NOTTAKEN) { // Redundant, update cache_data_1, LRU = 0
+        } else {
           TCache_tag_YAGS[     (set_index << 1) + 1 ] = tag;
-          TCache_valid_YAGS[   (set_index << 1) + 1 ] = 1;
           TCache_counter_YAGS[ (set_index << 1) + 1 ] = WT;
           TCache_LRU_YAGS[set_index] = 0;
-        } else { // Both not redundant
-          if (TCache_LRU_YAGS[set_index] == 0){ // LRU = 0 -> update cache_data_0, LRU = 1
-            TCache_tag_YAGS[     (set_index << 1) ] = tag;
-            TCache_valid_YAGS[   (set_index << 1) ] = 1;
-            TCache_counter_YAGS[ (set_index << 1) ] = WT;
-            TCache_LRU_YAGS[set_index] = 1;
-          } else {
-            TCache_tag_YAGS[     (set_index << 1) + 1 ] = tag;
-            TCache_valid_YAGS[   (set_index << 1) + 1 ] = 1;
-            TCache_counter_YAGS[ (set_index << 1) + 1 ] = WT;
-            TCache_LRU_YAGS[set_index] = 0;
-          }
         }
       }
     }
@@ -591,12 +546,10 @@ void cleanup_YAGS()
 
   free(TCache_tag_YAGS);
   free(TCache_counter_YAGS);
-  free(TCache_valid_YAGS);
   free(TCache_LRU_YAGS);
 
   free(NTCache_tag_YAGS);
   free(NTCache_counter_YAGS);
-  free(NTCache_valid_YAGS);
   free(NTCache_LRU_YAGS);
 }
 
